@@ -785,7 +785,6 @@
 </head>
 
 <body>
-
     <header>
         <div class="container navbar">
             <a href="#" class="logo">
@@ -1087,7 +1086,6 @@
             <button class="modal-close" onclick="closeModal()" aria-label="إغلاق النافذة">&times;</button>
 
             <div class="modal-image-container">
-                <!-- If image URL exists it will show, otherwise placeholder -->
                 <img id="modalImg" src="" alt="صورة العمل">
                 <div class="placeholder-text" id="modalPlaceholderText">صورة العمل</div>
             </div>
@@ -1113,26 +1111,39 @@
         }
 
         // ==========================================
-        // 2. إعدادات سحب الصور من قوقل شيت (Google Sheets)
+        // 2. إعدادات سحب الصور وتحويل روابط Google Drive تلقائياً 
         // ==========================================
-        /*
-        طريقة ربط قوقل شيت بسهولة:
-        1. افتح جدول Google Sheets جديد.
-        2. اجعل الأعمدة بالترتيب:
-           A: القسم (اكتب contracting للمقاولات، أو agriculture للزراعة والشبوك).
-           B: رابط الصورة (اتركه فارغاً إذا لم يوجد).
-           C: عنوان الصورة.
-           D: وصف الصورة.
-        3. اذهب إلى File > Share > Publish to web واختر Entire Document بصيغة (Web page أو CSV - غير مهم هنا).
-        4. تأكد أن المشاركة مفتوحة "Anyone with the link".
-        5. انسخ معرف الملف (ID) الموجود في الرابط الطويل للجدول وضعه في المتغير بالأسفل:
-        */
 
-        // ضع الـ ID هنا (مثال: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')
-        const GOOGLE_SHEET_ID = '2PACX-1vQaG3EXhOScw3E3Tn4Fe1c_BH-FvNY5pkKCZc3lKVBT2cMavS4CPYxrU6EeXYCtEuj4DDR2CtsJwdZV';
+        // You can provide either the sheet ID (recommended) or a published CSV URL.
+        const GOOGLE_SHEET_ID = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQaG3EXhOScw3E3Tn4Fe1c_BH-FvNY5pkKCZc3lKVBT2cMavS4CPYxrU6EeXYCtEuj4DDR2CtsJwdZV/pub?output=csv';
 
+        // دالة ذكية لمعالجة وتحويل أي رابط أو ID مأخوذ من Google Drive إلى رابط صورة مباشر يعمل في الموقع
+        function processDriveUrl(url) {
+            if (!url) return '';
+            // إذا لم يكن رابط جوجول درايف، يتم إرجاعه كما هو
+            if (!url.includes('drive.google.com') && !url.includes('docs.google.com')) {
+                return url;
+            }
+            let fileId = '';
+            const matchD = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            const matchId = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
 
-        // بيانات احتياطية (Fallback) للعمل مباشرة قبل إضافة الـ ID
+            if (matchD && matchD[1]) {
+                fileId = matchD[1];
+            } else if (matchId && matchId[1]) {
+                fileId = matchId[1];
+            } else if (url.length > 20 && !url.includes('/') && !url.includes('.')) {
+                fileId = url;
+            }
+
+            if (fileId) {
+                // إرجاع رابط المعاينة والصورة المعتمد من جوجل ليعمل بكفاءة داخل وسوم الصور
+                return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+            }
+            return url;
+        }
+
+        // بيانات احتياطية تظهر في حال كان هناك خطأ بالرابط أو لم تقم بوضعه بعد
         const fallbackData = [
             { section: 'contracting', imgUrl: '', title: 'تنفيذ أعمال عظم', desc: 'بناء هيكل خرساني لفيلا سكنية بجدة وفق أعلى المعايير.' },
             { section: 'contracting', imgUrl: '', title: 'تشطيب داخلي متكامل', desc: 'تنفيذ أعمال الجبس والدهانات الحديثة.' },
@@ -1148,45 +1159,101 @@
             const agriculContainer = document.getElementById('agriculture-gallery');
 
             try {
-                if (!GOOGLE_SHEET_ID) throw new Error("No Sheet ID provided");
+                if (!GOOGLE_SHEET_ID) throw new Error("يرجى وضع الـ ID أو رابط النشر للشيت!");
 
-                // استخدام واجهة gviz لقراءة البيانات كـ JSON بشكل آمن
+                // If a full URL is provided (published CSV), fetch and parse CSV directly.
+                if (GOOGLE_SHEET_ID.startsWith('http')) {
+                    const csvUrl = GOOGLE_SHEET_ID;
+                    const response = await fetch(csvUrl);
+                    if (!response.ok) throw new Error("فشل الاتصال بالشيت المنشور (CSV)");
+                    const text = await response.text();
+
+                    // Simple CSV parser that handles quoted fields
+                    function parseCSV(csvText) {
+                        const rows = [];
+                        let cur = [];
+                        let field = '';
+                        let inQuotes = false;
+                        for (let i = 0; i < csvText.length; i++) {
+                            const ch = csvText[i];
+                            const next = csvText[i + 1];
+                            if (inQuotes) {
+                                if (ch === '"' && next === '"') { field += '"'; i++; }
+                                else if (ch === '"') { inQuotes = false; }
+                                else { field += ch; }
+                            } else {
+                                if (ch === '"') { inQuotes = true; }
+                                else if (ch === ',') { cur.push(field); field = ''; }
+                                else if (ch === '\r') { continue; }
+                                else if (ch === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
+                                else { field += ch; }
+                            }
+                        }
+                        if (field !== '' || cur.length) { cur.push(field); rows.push(cur); }
+                        return rows;
+                    }
+
+                    const rows = parseCSV(text).filter(r => r.length > 0);
+                    // If first row looks like headers, skip it
+                    const header = rows[0] && rows[0].join(',').toLowerCase();
+                    const startIndex = header && (header.includes('section') || header.includes('img') || header.includes('title')) ? 1 : 0;
+                    const dataRows = rows.slice(startIndex);
+
+                    const formattedData = dataRows.map(row => {
+                        return {
+                            section: (row[0] && row[0].trim()) ? row[0].trim() : 'contracting',
+                            imgUrl: processDriveUrl((row[1] || '').trim()),
+                            title: (row[2] && row[2].trim()) ? row[2].trim() : 'بدون عنوان',
+                            desc: (row[3] && row[3].trim()) ? row[3].trim() : 'بدون وصف'
+                        };
+                    });
+
+                    renderGallery(formattedData, contractContainer, agriculContainer);
+                    return;
+                }
+
+                // Otherwise assume a sheet ID was provided and use the gviz endpoint
                 const url = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?tqx=out:json`;
                 const response = await fetch(url);
+                if (!response.ok) throw new Error("فشل الاتصال بالخادم");
+
                 const text = await response.text();
 
-                // تنظيف الرد لتحويله إلى JSON صحيح
-                const jsonText = text.substring(47).slice(0, -2);
-                const data = JSON.parse(jsonText);
+                const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\((([\s\S\w]+))\);/);
+                if (!jsonMatch || jsonMatch.length < 2) {
+                    throw new Error("البيانات المسترجعة ليست بصيغة صحيحة. تأكد أن الشيت 'عام' لمن لديه الرابط.");
+                }
 
+                const data = JSON.parse(jsonMatch[1]);
                 const rows = data.table.rows;
+
                 const formattedData = rows.map(row => {
+                    const rawImg = (row.c[1] && row.c[1].v) ? row.c[1].v : '';
                     return {
-                        section: row.c[0] ? row.c[0].v : 'contracting',
-                        imgUrl: row.c[1] ? row.c[1].v : '',
-                        title: row.c[2] ? row.c[2].v : 'بدون عنوان',
-                        desc: row.c[3] ? row.c[3].v : 'بدون وصف'
+                        section: (row.c[0] && row.c[0].v) ? row.c[0].v : 'contracting',
+                        imgUrl: processDriveUrl(rawImg), // تمرير الرابط عبر الدالة الذكية لتحويله
+                        title: (row.c[2] && row.c[2].v) ? row.c[2].v : 'بدون عنوان',
+                        desc: (row.c[3] && row.c[3].v) ? row.c[3].v : 'بدون وصف'
                     };
                 });
 
                 renderGallery(formattedData, contractContainer, agriculContainer);
 
             } catch (error) {
-                console.log("استخدام البيانات الاحتياطية (يرجى إضافة Sheet ID للعمل ديناميكياً)");
+                console.warn("تنبيه:", error.message);
+                console.log("يتم الآن عرض البيانات الاحتياطية حتى يتم إصلاح الرابط.");
                 renderGallery(fallbackData, contractContainer, agriculContainer);
             }
         }
 
         function renderGallery(dataList, contractContainer, agriculContainer) {
-            // تفريغ تأثير التحميل (Skeleton)
             contractContainer.innerHTML = '';
             agriculContainer.innerHTML = '';
 
             dataList.forEach((item, index) => {
                 const card = document.createElement('div');
-                card.className = 'gallery-item reveal active'; // active to bypass scroll trigger
+                card.className = 'gallery-item reveal active';
 
-                // تجهيز المحتوى الداخلي للصورة أو المربع الفارغ
                 let imageHTML = item.imgUrl
                     ? `<img src="${item.imgUrl}" alt="${item.title}" class="gallery-img" loading="lazy">`
                     : `<div class="gallery-placeholder">صورة عمل رقم ${index + 1}</div>`;
@@ -1199,7 +1266,6 @@
                     </div>
                 `;
 
-                // إضافة حدث فتح النافذة المنبثقة
                 card.onclick = () => openModal(item.title, item.desc, item.imgUrl, `صورة عمل رقم ${index + 1}`);
 
                 if (item.section.toLowerCase().trim() === 'agriculture') {
@@ -1210,11 +1276,10 @@
             });
         }
 
-        // تشغيل وظيفة جلب البيانات عند تحميل الصفحة
         window.addEventListener('DOMContentLoaded', loadGalleryData);
 
         // ==========================================
-        // 3. برمجة النافذة المنبثقة (Modal)
+        // 3. برمجة النافذة المنبثقة (Modal) والتأثيرات
         // ==========================================
         const modal = document.getElementById('imageModal');
         const modalTitle = document.getElementById('modalTitle');
@@ -1237,35 +1302,27 @@
             }
 
             modal.classList.add('active');
-            document.body.style.overflow = 'hidden'; // قفل التمرير للخلفية
+            document.body.style.overflow = 'hidden';
         }
 
         function closeModal() {
             modal.classList.remove('active');
             document.body.style.overflow = '';
-            setTimeout(() => { modalImg.src = ''; }, 400); // تنظيف الصورة بعد الحركة
+            setTimeout(() => { modalImg.src = ''; }, 400);
         }
 
         modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('active')) closeModal(); });
 
-        // ==========================================
-        // 4. برمجة تأثيرات الواجهة (UI Interactions)
-        // ==========================================
-
-        // القائمة الجانبية للجوال
         const menuToggle = document.querySelector('.menu-toggle');
         const navLinks = document.querySelector('.nav-links');
-
         menuToggle.addEventListener('click', () => { navLinks.classList.toggle('active'); });
         document.querySelectorAll('.nav-links a').forEach(link => {
             link.addEventListener('click', () => { navLinks.classList.remove('active'); });
         });
 
-        // الهيدر المتفاعل وزر الصعود
         const header = document.querySelector('header');
         const btnUp = document.getElementById('btnUp');
-
         window.addEventListener('scroll', () => {
             if (window.scrollY > 10) {
                 header.style.background = "rgba(255, 255, 255, 0.95)";
@@ -1281,7 +1338,6 @@
 
         function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
-        // حركة ظهور العناصر عند التمرير (Intersection Observer)
         const revealElements = document.querySelectorAll('.reveal');
         const revealCallback = (entries, observer) => {
             entries.forEach(entry => {
