@@ -167,6 +167,40 @@
         .logo span {
             color: var(--secondary-color);
         }
+        
+        /* التنسيق الجديد المميز لشارة "جدة" داخل الشعار */
+        .logo .logo-city {
+            font-size: 0.6em;
+            background: linear-gradient(135deg, rgba(217, 119, 6, 0.1), rgba(252, 211, 77, 0.15));
+            color: var(--secondary-hover);
+            padding: 3px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(217, 119, 6, 0.2);
+            font-weight: 700;
+            margin-right: 6px;
+            display: inline-block;
+            vertical-align: middle;
+            letter-spacing: 0.5px;
+            transform: translateY(-2px);
+        }
+
+        /* حاوية النص في الشعار لضمان التجاوب */
+        .logo-text-wrapper {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 480px) {
+            .logo {
+                font-size: 1.2rem;
+            }
+            .logo .logo-city {
+                padding: 2px 8px;
+                font-size: 0.55em;
+                margin-right: 4px;
+            }
+        }
 
         .nav-links {
             display: flex;
@@ -796,7 +830,9 @@
                     <path d="M12 15V3"></path>
                     <path d="m8 7 4-4 4 4"></path>
                 </svg>
-             أبو عادل <span> للمقاولات العامة - جدة</span>
+                <div class="logo-text-wrapper">
+                    أبو عادل <span>للمقاولات العامة</span> <span class="logo-city">جدة</span>
+                </div>
             </a>
             <nav>
                 <ul class="nav-links">
